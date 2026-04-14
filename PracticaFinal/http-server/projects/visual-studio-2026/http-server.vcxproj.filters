@@ -18,9 +18,6 @@
     <ClCompile Include="..\..\code\main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\code\LuaServerApplication.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\code\StaticFileServer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

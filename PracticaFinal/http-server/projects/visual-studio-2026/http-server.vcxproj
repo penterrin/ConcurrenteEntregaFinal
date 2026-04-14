@@ -83,7 +83,6 @@
     <ClInclude Include="..\..\code\StaticFileServer.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\code\LuaServerApplication.cpp" />
     <ClCompile Include="..\..\code\main.cpp" />
     <ClCompile Include="..\..\code\StaticFileServer.cpp" />
   </ItemGroup>
