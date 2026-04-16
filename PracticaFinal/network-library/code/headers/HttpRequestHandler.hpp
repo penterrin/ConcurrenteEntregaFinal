@@ -11,6 +11,10 @@
 namespace argb
 {
 
+    /** This class serves as an interface for handling HTTP requests. It defines a pure virtual method `process` that
+      * must be implemented by derived classes to provide custom logic for processing incoming HTTP requests and generating
+      * appropriate HTTP responses.
+      */
     class HttpRequestHandler
     {
     public:

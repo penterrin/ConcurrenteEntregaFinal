@@ -78,7 +78,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\code\LuaServerApplication.hpp" />
     <ClInclude Include="..\..\code\SignalHandler.hpp" />
     <ClInclude Include="..\..\code\StaticFileServer.hpp" />
   </ItemGroup>

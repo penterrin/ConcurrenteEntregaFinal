@@ -118,4 +118,32 @@ namespace argb
         return true;
     }
 
+    HttpRequestHandler::Ptr StaticFileServer::create_handler (HttpRequest::Method method, std::string_view request_path)
+    {
+        if (method == HttpRequest::GET)
+        {
+            using namespace std::filesystem;
+
+            // Strip the leading '/' so that "operator /" appends rather than replaces the base path:
+
+            std::string_view relative = request_path;
+
+            if (not relative.empty () && relative.front () == '/') relative.remove_prefix (1);
+
+            path full_path      = weakly_canonical (path{ base_path } / path{ relative });
+            path canonical_base = weakly_canonical (path{ base_path });
+
+            // Reject any path that resolves outside the base directory (path traversal guard):
+
+            auto base_end = std::mismatch (canonical_base.begin (), canonical_base.end (), full_path.begin ()).first;
+
+            if (base_end == canonical_base.end ())
+            {
+                return { std::make_unique<StaticFileRequestHandler> (full_path.string ()) };
+            }
+        }
+
+        return {};
+    }
+
 }
