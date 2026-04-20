@@ -39,3 +39,6 @@ libraries/
 *.exe
 *.out
 *.app
+
+# Exceptions
+!libraries/**/*.lib
