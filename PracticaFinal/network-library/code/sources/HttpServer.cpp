@@ -31,34 +31,25 @@ namespace argb
     {
     }
 
-    void HttpServer::RequestHandlerManager::register_handler_factory(std::string path, HttpRequestHandlerFactory& factory)
+    // Método del profe (busca en el vector)
+    HttpRequestHandler::Ptr HttpServer::RequestHandlerManager::create_handler
+    (
+        HttpRequest::Method method,
+        std::string_view    request_path
+    )
+        const
     {
-        if (path.length() > 1 && path.back() == '/')
-            path.pop_back();
-        handler_factories[std::move(path)] = &factory;
-    }
-
-    HttpRequestHandlerFactory* HttpServer::RequestHandlerManager::find_handler_factory_for_path(std::string_view request_path) const
-    {
-        if (not handler_factories.empty())
+        for (auto* factory : handler_factories)
         {
-            auto item = handler_factories.upper_bound(request_path);
-            if (item != handler_factories.begin())
+            if (auto handler = factory->create_handler(method, request_path))
             {
-                --item;
-                const std::string& factory_path = item->first;
-                if (request_path.starts_with(factory_path))
-                {
-                    if (request_path.length() == factory_path.length() || request_path[factory_path.length()] == '/' || factory_path == "/")
-                        return item->second;
-                }
+                return handler;
             }
         }
         return nullptr;
     }
 
-    // --- EL NUEVO TRABAJO DEL RECEPCIONISTA (Hilo dedicado) ---
-   // --- EL TRABAJO DEL RECEPCIONISTA (Hilo 1) ---
+    // --- NUESTRO HILO RECEPCIONISTA ---
     void HttpServer::connection_management_loop()
     {
         while (running)
@@ -69,7 +60,7 @@ namespace argb
         }
     }
 
-    // --- EL NUEVO TRABAJO DEL CAMARERO (Hilo 2) ---
+    // --- NUESTRO HILO CAMARERO ---
     void HttpServer::data_transfer_loop()
     {
         while (running)
@@ -79,7 +70,7 @@ namespace argb
         }
     }
 
-    // --- EL JEFE DE SALA (Hilo Principal) ---
+    // --- NUESTRO HILO PRINCIPAL ---
     void HttpServer::run(const Address& address, const Port& port)
     {
         listener.listen(address, port);
@@ -87,20 +78,17 @@ namespace argb
             ListenerScopeGuard guard{ listener };
             running = true;
 
-            // 1. Contratamos y encendemos a nuestros dos empleados especializados
             std::thread connection_thread(&HttpServer::connection_management_loop, this);
-            std::thread data_thread(&HttpServer::data_transfer_loop, this); // <-- NUEVO
+            std::thread data_thread(&HttpServer::data_transfer_loop, this);
 
-            // 2. El Jefe de Sala ahora solo se dedica a gestionar los tickets con la cocina
             while (running)
             {
                 run_handlers();
                 std::this_thread::yield();
             }
 
-            // 3. Si cerramos el restaurante, esperamos a que los dos terminen su turno
             if (connection_thread.joinable()) connection_thread.join();
-            if (data_thread.joinable())       data_thread.join(); // <-- NUEVO
+            if (data_thread.joinable())       data_thread.join();
         }
     }
 
@@ -115,7 +103,7 @@ namespace argb
                 context.socket = std::move(*new_socket);
                 context.socket.set_blocking(false);
 
-                // --- CANDADO: Protegemos la inserción de nuevos clientes ---
+                // --- NUESTRO CANDADO ---
                 std::lock_guard<std::mutex> lock(connections_mutex);
                 connections.emplace(socket_handle, std::move(context));
             }
@@ -128,7 +116,7 @@ namespace argb
 
     void HttpServer::transfer_data()
     {
-        // --- CANDADO: Protegemos la lectura de datos ---
+        // --- NUESTRO CANDADO ---
         std::lock_guard<std::mutex> lock(connections_mutex);
 
         for (auto& [socket_handle, context] : connections)
@@ -174,6 +162,7 @@ namespace argb
                 else
                 {
                     static constexpr std::string_view not_found_message = "File not found";
+
                     HttpResponse::Serializer(context.response)
                         .status(404)
                         .header("Content-Type", "text/plain; charset=utf-8")
@@ -235,7 +224,7 @@ namespace argb
 
     void HttpServer::run_handlers()
     {
-        // --- CANDADO: Protegemos el estado de las tareas ---
+        // --- NUESTRO CANDADO ---
         std::lock_guard<std::mutex> lock(connections_mutex);
 
         for (auto& [socket_handle, context] : connections)
@@ -244,10 +233,11 @@ namespace argb
             {
                 if (context.handler)
                 {
+                    // --- NUESTRO THREAD POOL EN ACCIÓN ---
                     if (!context.handler_future.valid())
                     {
-                        context.handler_future = thread_pool.enqueue([&context, socket_handle]() {
-                            return context.handler->process(context.request, context.response, socket_handle);
+                        context.handler_future = thread_pool.enqueue([&context]() {
+                            return context.handler->process(context.request, context.response);
                             });
                     }
                     else if (context.handler_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
@@ -265,7 +255,7 @@ namespace argb
 
     void HttpServer::close_inactive_connections()
     {
-        // --- CANDADO: Protegemos el borrado de clientes ---
+        // --- NUESTRO CANDADO ---
         std::lock_guard<std::mutex> lock(connections_mutex);
 
         const auto current_time = now();
@@ -275,7 +265,9 @@ namespace argb
             bool   close = false;
 
             if (context.state == ConnectionContext::CLOSED)
+            {
                 close = true;
+            }
             else if (current_time - context.last_activity > connection_timeout)
             {
                 cout << "Closing connection " << connection->first << " due to timeout." << endl;

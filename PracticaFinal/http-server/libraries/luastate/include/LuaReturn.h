@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 namespace lua {
     
     //////////////////////////////////////////////////////////////////////////////////////////////
@@ -22,14 +24,23 @@ namespace lua {
             
             /// Function get single value from lua stack
             template<typename T>
-            static inline T readValue(lua_State* luaState,
-                                      detail::DeallocQueue* deallocQueue,
-                                      int stackTop)
+            static inline auto readValue(lua_State* luaState,
+                                         detail::DeallocQueue* deallocQueue,
+                                         int stackTop)
             {
-//                if (!stack::check<T>(luaState, stackTop))
+                using RawType = std::remove_cv_t<std::remove_reference_t<T>>;
+
+//                if (!stack::check<RawType>(luaState, stackTop))
 //                    throw lua::TypeMismatchError(luaState, stackTop);
-                
-                return lua::Value(std::make_shared<detail::StackItem>(luaState, deallocQueue, stackTop - 1, 1, 0));
+
+                if constexpr (std::is_same_v<RawType, lua::Value>)
+                {
+                    return lua::Value(std::make_shared<detail::StackItem>(luaState, deallocQueue, stackTop - 1, 1, 0));
+                }
+                else
+                {
+                    return stack::read<RawType>(luaState, stackTop);
+                }
             }
             
             /// Function creates indexes for mutli values and get them from stack

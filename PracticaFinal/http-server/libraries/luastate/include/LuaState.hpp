@@ -23,14 +23,24 @@
 #   define LUASTATE_ASSERT(condition)
 #endif
 
+#if defined(__cplusplus) && __cplusplus >= 202302L
+#   include <utility>
+#   define LUASTATE_UNREACHABLE() std::unreachable()
+#elif defined(_MSC_VER)
+#   define LUASTATE_UNREACHABLE() __assume(false)
+#elif defined(__GNUC__) || defined(__clang__)
+#   define LUASTATE_UNREACHABLE() __builtin_unreachable()
+#else
+#   define LUASTATE_UNREACHABLE() assert(false && "Reached supposedly unreachable code")
+#endif
+
 #include <cassert>
-#include <cmath>
 #include <cstring>
+#include <cmath>
 #include <functional>
 #include <memory>
-#include <tuple>
 #include <string>
-#include <string_view>
+#include <tuple>
 
 #include <lua.hpp>
 
@@ -150,7 +160,7 @@ namespace lua {
             stack::push(_luaState, std::forward<T>(value));
             lua_setglobal(_luaState, key);
         }
-
+        
         /// Executes file text on Lua state
         ///
         /// @throws lua::LoadError      When file cannot be found or loaded
@@ -217,6 +227,26 @@ namespace lua {
         ///
         /// @return Pointer of Lua state
         lua_State* getState() { return _luaState; }
+
+        /// Raises a Lua error, equivalent to calling error() in Lua.
+        /// This function never returns — it longjmps back to the nearest pcall.
+        ///
+        /// @note Only call this from within a C function invoked by Lua (e.g. a registered functor).
+        ///       Ensure no C++ objects requiring destruction are on the stack at the call site.
+        ///
+        /// @param format   printf-style format string
+        /// @param args     Optional format arguments
+        template <typename... Args>
+        [[noreturn]] void error(const char* format, Args... args)
+        {
+            luaL_error(_luaState, format, args...);
+            LUASTATE_UNREACHABLE();
+        }
+
+        /// Get pointer of deallocation queue
+        ///
+        /// @return Pointer of deallocation queue
+        detail::DeallocQueue* getDeallocQueue() { return _deallocQueue; }
         
         
         //////////////////////////////////////////////////////////////////////////////////////////////
@@ -268,3 +298,5 @@ namespace lua {
         }
     };
 }
+
+#include "./LuaCoroutine.h"

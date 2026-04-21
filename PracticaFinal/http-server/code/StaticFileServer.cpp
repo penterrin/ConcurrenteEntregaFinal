@@ -24,36 +24,29 @@ namespace argb
         }
     }
 
-    bool StaticFileServer::StaticFileRequestHandler::process
-    (
-        const HttpRequest & request,
-        HttpResponse      & response,
-        HttpMessage::Id     id
-    )
+    bool StaticFileServer::StaticFileRequestHandler::process (const HttpRequest & request, HttpResponse & response)
     {
         switch (state)
         {
             case FILE_NOT_FOUND:
             {
-                send_file_not_found_response (response);
-
+                static constexpr std::string_view not_found_message = "File not found";
+                send_plain_text_response (response, 404, not_found_message);
                 state = FINISHED;
-
                 return true;
             }
 
             case INTERNAL_ERROR:
             {
-                send_internal_error_response (response);
-
+                static constexpr std::string_view internal_error_message = "Internal error";
+                send_plain_text_response (response, 500, internal_error_message);    
                 state = FINISHED;
-
                 return true;
             }
 
             case READING_FILE:
             {
-                bool finished = send_file_content_response (response);
+                bool finished = send_response (response);
 
                 if (finished) state = FINISHED;
             
@@ -64,33 +57,7 @@ namespace argb
         return true;
     }
 
-    void StaticFileServer::StaticFileRequestHandler::send_file_not_found_response (HttpResponse & response)
-    {
-        static constexpr std::string_view not_found_message = "File not found";
-
-        HttpResponse::Serializer(response)
-            .status     (404)
-            .header     ("Content-Type",   "text/plain; charset=utf-8")
-            .header     ("Content-Length", std::to_string (not_found_message.size ()))
-            .header     ("Connection",     "close")
-            .end_header ()
-            .body       (not_found_message);
-    }
-
-    void StaticFileServer::StaticFileRequestHandler::send_internal_error_response (HttpResponse & response)
-    {
-        static constexpr std::string_view internal_error_message = "Internal error";
-
-        HttpResponse::Serializer(response)
-            .status     (500)
-            .header     ("Content-Type",   "text/plain; charset=utf-8")
-            .header     ("Content-Length", std::to_string (internal_error_message.size ()))
-            .header     ("Connection",     "close")
-            .end_header ()
-            .body       (internal_error_message);
-    }
-
-    bool StaticFileServer::StaticFileRequestHandler::send_file_content_response (HttpResponse & response)
+    bool StaticFileServer::StaticFileRequestHandler::send_response (HttpResponse & response)
     {
         // Aquí se podría implementar la lógica de lectura incremental del archivo y escritura en el cuerpo de la respuesta.
         // Por simplicidad, por el momento se lee todo el archivo de una vez.
@@ -120,26 +87,36 @@ namespace argb
 
     HttpRequestHandler::Ptr StaticFileServer::create_handler (HttpRequest::Method method, std::string_view request_path)
     {
-        if (method == HttpRequest::GET)
+        if (method == HttpRequest::Method::GET)
         {
             using namespace std::filesystem;
 
-            // Strip the leading '/' so that "operator /" appends rather than replaces the base path:
-
-            std::string_view relative = request_path;
-
-            if (not relative.empty () && relative.front () == '/') relative.remove_prefix (1);
-
-            path full_path      = weakly_canonical (path{ base_path } / path{ relative });
-            path canonical_base = weakly_canonical (path{ base_path });
-
-            // Reject any path that resolves outside the base directory (path traversal guard):
-
-            auto base_end = std::mismatch (canonical_base.begin (), canonical_base.end (), full_path.begin ()).first;
-
-            if (base_end == canonical_base.end ())
+            if (request_path.empty () || request_path == "/")
             {
-                return { std::make_unique<StaticFileRequestHandler> (full_path.string ()) };
+                request_path = "/index.html";
+            }
+
+            if (request_path.length () > requests_base_path.length () && request_path.starts_with (requests_base_path))
+            {
+                // Strip the leading '/' from the request path and resolve it against the local storage base path to get
+                // the full file path:
+
+                path full_path      = weakly_canonical (path{ local_storage_base_path } / path{ request_path.substr (1) });
+                path canonical_base = weakly_canonical (path{ local_storage_base_path });
+
+                // Reject any path that resolves outside the base directory (path traversal guard):
+
+                auto base_end = std::mismatch
+                (
+                    canonical_base.begin (), canonical_base.end (),
+                         full_path.begin (),      full_path.end ()
+                )
+                .first;
+
+                if (base_end == canonical_base.end ())
+                {
+                    return { std::make_unique<StaticFileRequestHandler> (full_path.string ()) };
+                }
             }
         }
 

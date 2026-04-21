@@ -16,12 +16,13 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
-// --- INCLUDES DEL THREAD POOL Y CONCURRENCIA ---
+// --- NUESTRA ARQUITECTURA DE CONCURRENCIA ---
 #include "ThreadPool.hpp"
 #include <future>
 #include <thread>
-#include <mutex> // NUEVO: Para el candado del mapa de conexiones
+#include <mutex>
 
 namespace argb
 {
@@ -47,7 +48,7 @@ namespace argb
             size_t                   response_bytes_sent;
             HttpRequestHandler::Ptr  handler;
 
-            std::future<bool>        handler_future;
+            std::future<bool>        handler_future; // Nuestro ticket del Thread Pool
 
             ConnectionContext();
 
@@ -58,24 +59,19 @@ namespace argb
             ConnectionContext& operator = (ConnectionContext&&) noexcept = delete;
         };
 
+        // El nuevo manager del profe (usando std::vector)
         class RequestHandlerManager
         {
-            using HandlerFactoryMap = std::map<std::string, HttpRequestHandlerFactory*, std::less<>>;
-            HandlerFactoryMap handler_factories;
+            using HandlerFactoryContainer = std::vector<HttpRequestHandlerFactory*>;
+            HandlerFactoryContainer handler_factories;
 
         public:
-            void register_handler_factory(std::string path, HttpRequestHandlerFactory& factory);
-            HttpRequestHandler::Ptr create_handler(HttpRequest::Method method, std::string_view request_path) const
+            void register_handler_factory(HttpRequestHandlerFactory& factory)
             {
-                if (auto* factory = find_handler_factory_for_path(request_path))
-                {
-                    return factory->create_handler(method, request_path);
-                }
-                return nullptr;
+                handler_factories.push_back(&factory);
             }
 
-        private:
-            HttpRequestHandlerFactory* find_handler_factory_for_path(std::string_view request_path) const;
+            HttpRequestHandler::Ptr create_handler(HttpRequest::Method method, std::string_view request_path) const;
         };
 
         struct ListenerScopeGuard
@@ -95,19 +91,19 @@ namespace argb
         std::atomic<bool>     running{};
         RequestHandlerManager request_handler_manager;
 
+        // --- NUESTRAS HERRAMIENTAS ---
         ThreadPool            thread_pool;
-
-        // --- NUEVAS VARIABLES DE CONCURRENCIA ---
-        std::mutex            connections_mutex; // Candado para proteger el mapa de conexiones
+        std::mutex            connections_mutex;
 
     public:
+        // Arrancamos el Thread Pool al crear el servidor
         HttpServer() : thread_pool(std::thread::hardware_concurrency())
         {
         }
 
-        void register_handler_factory(std::string_view path, HttpRequestHandlerFactory& factory)
+        void register_handler_factory(HttpRequestHandlerFactory& factory)
         {
-            request_handler_manager.register_handler_factory(std::string(path), factory);
+            request_handler_manager.register_handler_factory(factory);
         }
 
         void run(const Port& local_port)
@@ -116,7 +112,11 @@ namespace argb
         }
 
         void run(const Address& local_address, const Port& local_port);
-        void stop() { running = false; }
+
+        void stop()
+        {
+            running = false;
+        }
 
     private:
         void accept_connections();
@@ -127,7 +127,7 @@ namespace argb
         void run_handlers();
         void close_inactive_connections();
 
-        // --- NUEVO MÉTODO: El bucle del Recepcionista ---
+        // --- NUESTROS BUCLES DE HILOS ---
         void connection_management_loop();
         void data_transfer_loop();
     };

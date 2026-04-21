@@ -57,31 +57,53 @@ namespace argb
               * @param request The incoming HTTP request that triggered this handler.
               * @param response The HTTP response object that will be populated with the appropriate status, headers, and
               *     body based on the processing of the request.
-              * @param id The identifier for the HTTP message being processed, which can be used for tracking or logging purposes.
               * @return true if the response is fully ready to be sent back to the client, or false if the handler is still
               *     processing.
               */
-            bool process (const HttpRequest & request, HttpResponse & response, HttpMessage::Id id) override;
+            bool process (const HttpRequest & request, HttpResponse & response) override;
 
         private:
 
-            void send_file_not_found_response (HttpResponse & response);
-            void send_internal_error_response (HttpResponse & response);
-            bool send_file_content_response   (HttpResponse & response);
+            bool send_response (HttpResponse & response);
 
         };
 
-        std::string base_path;
+        /** The base directory path in the local file system from which files will be served.
+          * This path is not used to match against the request path, but rather as the root for resolving requested file paths.
+          * For example, if the base directory is D:/www/static" and a request is made for "/index.html", the server will
+          * attempt to serve the file located at "D:/www/static/index.html".
+          */
+        std::string local_storage_base_path;
+
+        /** The base path prefix that incoming request paths must start with in order to be considered for handling by this
+          * factory. For example, if the requests base path is "/files", then only requests with paths starting with "/files"
+          * will be considered for handling by this factory.
+          * The actual file path will be resolved by appending the request path to the local storage base path. For example,
+          * if the local storage base path is "D:/www/static" and the requests base path is "/files", then a request for
+          * "/files/index.html" will attempt to serve the file located at "D:/www/static/files/index.html".
+          */
+        std::string requests_base_path;
 
     public:
 
         /** Constructs a StaticFileServer with the specified base directory path. The base directory is the root from
           * which files will be served.
-          * @param base_path A string view representing the path to the base directory from which files will be served.
+          * @param local_storage_base_path A string view representing the path to the base directory from which files will be served.
           *     This path is used as the root for resolving requested file paths.
           */
-        StaticFileServer(std::string_view base_path) : base_path(base_path)
+        StaticFileServer(std::string_view local_storage_base_path, std::string_view requests_base_path)
+            : local_storage_base_path(local_storage_base_path)
+            , requests_base_path(requests_base_path)
         {
+            if (requests_base_path.empty () || requests_base_path.front () != '/')
+            {
+                throw std::invalid_argument("Requests base path must be a non-empty string starting with '/'");
+            }
+
+            if (requests_base_path.back () != '/')
+            {
+                this->requests_base_path.push_back ('/');
+            }
         }
 
         /** Creates a request handler for the given HTTP method and request path. If the method is GET and the request

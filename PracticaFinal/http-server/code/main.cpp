@@ -1,16 +1,16 @@
-
-/// @copyright Copyright (c) 2026 Ángel, All rights reserved.
-/// angel.rodriguez@udit.es
+/// @copyright Copyright (c) 2026 Laura Gallego, All rights reserved.
+/// laura.gallego@udit.es
 
 #include <HttpServer.hpp>
 #include <iostream>
 #include <NetworkSetup.hpp>
 #include "SignalHandler.hpp"
 #include "StaticFileServer.hpp"
+#include "LuaServerApplication.hpp"
 
 using namespace argb;
 
-int main (int , const char * [])
+int main(int, const char* [])
 {
     try
     {
@@ -18,17 +18,19 @@ int main (int , const char * [])
         HttpServer   server;
         Port         port{ 80 };
 
-        StaticFileServer static_file_server("../../examples/static-website");
+        LuaServerApplication lua_server_app("../../examples/lua-server/main.lua");
+        StaticFileServer     static_file_server("../../examples/static-website", "/");
 
-        server.register_handler_factory ("/", static_file_server);
+        server.register_handler_factory(lua_server_app);
+        server.register_handler_factory(static_file_server);
 
         std::cout << "Running HTTP server on port " << static_cast<uint16_t>(port) << "..." << std::endl;
 
-        SignalHandler::handle (server);
+        SignalHandler::handle(server);
 
-        server.run (port);
+        server.run(port);
     }
-    catch (const NetworkException & exception)
+    catch (const NetworkException& exception)
     {
         std::cout << "Network exception: " << exception << std::endl;
 

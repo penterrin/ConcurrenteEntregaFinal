@@ -50,13 +50,13 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\..\..\network-library\code\headers;..\..\libraries\lua\include;..\..\libraries\luastate\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\network-library\code\headers;..\..\libraries\lua\include;..\..\libraries\luastate\include;..\..\libraries\sqlite\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(Platform)\$(Configuration);..\..\libraries\lua\lib\vs-2026\x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>network-library.lib;Ws2_32.lib;lua-debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(Platform)\$(Configuration);..\..\libraries\lua\lib\vs-2026\x64;..\..\libraries\sqlite\lib\vs-2026\x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sqlite-static-debug.lib;network-library.lib;Ws2_32.lib;lua-debug.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -68,21 +68,26 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>..\..\..\network-library\code\headers;..\..\libraries\lua\include;..\..\libraries\luastate\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\network-library\code\headers;..\..\libraries\lua\include;..\..\libraries\luastate\include;..\..\libraries\sqlite\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(Platform)\$(Configuration);..\..\libraries\lua\lib\vs-2026\x64</AdditionalLibraryDirectories>
-      <AdditionalDependencies>network-library.lib;Ws2_32.lib;lua-release.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(Platform)\$(Configuration);..\..\libraries\lua\lib\vs-2026\x64;..\..\libraries\sqlite\lib\vs-2026\x64</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sqlite-static-release.lib;network-library.lib;Ws2_32.lib;lua-release.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\code\LuaServerApplication.hpp" />
+    <ClInclude Include="..\..\code\LuaTypeAdapter.hpp" />
     <ClInclude Include="..\..\code\SignalHandler.hpp" />
+    <ClInclude Include="..\..\code\Sqlite.hpp" />
     <ClInclude Include="..\..\code\StaticFileServer.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\code\LuaServerApplication.cpp" />
     <ClCompile Include="..\..\code\main.cpp" />
+    <ClCompile Include="..\..\code\Sqlite.cpp" />
     <ClCompile Include="..\..\code\StaticFileServer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
