@@ -21,6 +21,10 @@ int main(int, const char* [])
         LuaServerApplication lua_server_app("../../examples/lua-server/main.lua");
         StaticFileServer     static_file_server("../../examples/static-website", "/");
 
+        lua_server_app.set_thread_pool(server.get_thread_pool());
+
+        server.register_handler_factory(lua_server_app);
+
         server.register_handler_factory(lua_server_app);
         server.register_handler_factory(static_file_server);
 

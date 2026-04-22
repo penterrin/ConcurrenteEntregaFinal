@@ -90,6 +90,9 @@
     <ClCompile Include="..\..\code\Sqlite.cpp" />
     <ClCompile Include="..\..\code\StaticFileServer.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\examples\lua-server\main.lua" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

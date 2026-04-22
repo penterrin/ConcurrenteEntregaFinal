@@ -191,3 +191,24 @@ server.route("DELETE", "/users/", function (request, response)
 
 end)
 
+-- =========================================================
+-- PRUEBA DE TAREAS ASÍNCRONAS EN EL THREAD POOL DE C++
+-- =========================================================
+
+function tarea_pesada_A()
+    print("[Thread Pool] Trabajador A ejecutando paso 1...")
+    coroutine.yield() -- Cede el control a C++
+    print("[Thread Pool] Trabajador A ejecutando paso 2...")
+    coroutine.yield()
+    print("[Thread Pool] Tarea A terminada con éxito!")
+end
+
+function tarea_pesada_B()
+    print("[Thread Pool] Trabajador B ejecutando paso 1...")
+    coroutine.yield()
+    print("[Thread Pool] Tarea B terminada con éxito!")
+end
+
+-- Lanzamos las tareas asíncronas desde Lua para que C++ las ejecute en paralelo
+server.async("tarea_pesada_A")
+server.async("tarea_pesada_B")

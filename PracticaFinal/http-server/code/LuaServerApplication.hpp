@@ -14,6 +14,9 @@
 #include "Sqlite.hpp"
 #include <type_traits>
 #include <vector>
+#include <mutex>
+#include <ThreadPool.hpp>
+#include <LuaCoroutine.h>
 
 namespace argb
 {
@@ -121,6 +124,19 @@ namespace argb
         VirtualMachine           virtual_machine;
         EndpointsByMethodAndPath endpoints;
         std::filesystem::path    base_path;
+
+    private:
+        ThreadPool* thread_pool = nullptr;
+
+    public:
+        std::recursive_mutex     lua_mutex; // Mutex especial para proteger la máquina virtual
+
+        LuaServerApplication(const std::string_view& script_path_string);
+        HttpRequestHandler::Ptr create_handler(HttpRequest::Method method, std::string_view path) override;
+
+        // Nuevas funciones para conectar las corrutinas
+        void set_thread_pool(ThreadPool& pool) { thread_pool = &pool; }
+        void enqueue_coroutine(std::shared_ptr<lua::Coroutine> coro);
 
     public:
 

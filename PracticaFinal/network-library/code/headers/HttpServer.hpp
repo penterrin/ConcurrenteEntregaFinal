@@ -101,6 +101,8 @@ namespace argb
         {
         }
 
+        ThreadPool& get_thread_pool() { return thread_pool; }
+
         void register_handler_factory(HttpRequestHandlerFactory& factory)
         {
             request_handler_manager.register_handler_factory(factory);
