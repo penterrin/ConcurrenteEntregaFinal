@@ -270,10 +270,15 @@ namespace argb
             }
             else if (current_time - context.last_activity > connection_timeout)
             {
-                cout << "Closing connection " << connection->first << " due to timeout." << endl;
-                close = true;
+                // ¡TRUCO SENIOR! Solo lo echamos por timeout si NO está en el ThreadPool
+                if (context.state != ConnectionContext::RUNNING_HANDLER)
+                {
+                    cout << "Closing connection " << connection->first << " due to timeout." << endl;
+                    close = true;
+                }
             }
 
+            // ... (el resto sigue igual)
             if (close)
             {
                 context.socket.close();
