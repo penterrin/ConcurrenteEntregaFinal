@@ -1,7 +1,5 @@
-
 -- ---------------------------------------------------------------------------
 -- Setup: create and seed the test table if it does not exist yet.
--- This runs once when the script is loaded.
 -- ---------------------------------------------------------------------------
 
 db.execute([[
@@ -21,31 +19,25 @@ db.execute("INSERT INTO users (name, email, score) VALUES (?, ?, ?)", {"Eve",   
 
 -- ---------------------------------------------------------------------------
 -- GET /hello
--- Tests: request:get_method(), request:get_header(), response pipeline
 -- ---------------------------------------------------------------------------
 
 server.route("GET", "/hello", function (request, response)
-
     local message = "Hello from the bridge! Method: " .. request:get_method()
                  .. " | Agent: " .. (request:get_header("User-Agent") or "unknown")
 
     response:status     (200)
     response:header     ("Content-Type",   "text/plain; charset=utf-8")
-    response:header     ("Content-Length",  #message)
+    response:header     ("Content-Length",  tostring(#message))
     response:header     ("Connection",     "close")
     response:end_header ()
     response:body       (message)
-
 end)
 
 -- ---------------------------------------------------------------------------
 -- GET /users
--- Tests: db.query with no bind args, row:advance(), row:get_integer(),
---        row:get_string(), row:get_real()
 -- ---------------------------------------------------------------------------
 
 server.route("GET", "/users", function (request, response)
-
     local body = ""
     local row  = db.query("SELECT id, name, email, score FROM users ORDER BY id")
 
@@ -60,20 +52,17 @@ server.route("GET", "/users", function (request, response)
 
     response:status     (200)
     response:header     ("Content-Type",   "text/plain; charset=utf-8")
-    response:header     ("Content-Length",  #body)
+    response:header     ("Content-Length",  tostring(#body))
     response:header     ("Connection",     "close")
     response:end_header ()
     response:body       (body)
-
 end)
 
 -- ---------------------------------------------------------------------------
 -- GET /users/<id>
--- Tests: request:get_path(), db.query with an integer bind arg, empty result set
 -- ---------------------------------------------------------------------------
 
 server.route("GET", "/users/", function (request, response)
-
     local path = request:get_path ()
     local id   = tonumber (path:match ("/users/(%d+)"))
 
@@ -81,7 +70,7 @@ server.route("GET", "/users/", function (request, response)
         local message = "Bad request: expected /users/<integer id>"
         response:status     (400)
         response:header     ("Content-Type",   "text/plain; charset=utf-8")
-        response:header     ("Content-Length",  #message)
+        response:header     ("Content-Length",  tostring(#message))
         response:header     ("Connection",     "close")
         response:end_header ()
         response:body       (message)
@@ -97,7 +86,7 @@ server.route("GET", "/users/", function (request, response)
 
         response:status     (200)
         response:header     ("Content-Type",   "text/plain; charset=utf-8")
-        response:header     ("Content-Length",  #body)
+        response:header     ("Content-Length",  tostring(#body))
         response:header     ("Connection",     "close")
         response:end_header ()
         response:body       (body)
@@ -105,22 +94,18 @@ server.route("GET", "/users/", function (request, response)
         local message = "User " .. id .. " not found"
         response:status     (404)
         response:header     ("Content-Type",   "text/plain; charset=utf-8")
-        response:header     ("Content-Length",  #message)
+        response:header     ("Content-Length",  tostring(#message))
         response:header     ("Connection",     "close")
         response:end_header ()
         response:body       (message)
     end
-
 end)
 
 -- ---------------------------------------------------------------------------
 -- POST /users
--- Tests: request:get_body(), db.execute with multiple bind args,
---        db.query with a string bind arg
 -- ---------------------------------------------------------------------------
 
 server.route("POST", "/users", function (request, response)
-
     local body  = request:get_body ()
     local name  = body:match ("name=([^&]+)")
     local email = body:match ("email=([^&]+)")
@@ -130,7 +115,7 @@ server.route("POST", "/users", function (request, response)
         local message = "Bad request: expected body 'name=...&email=...&score=...'"
         response:status     (400)
         response:header     ("Content-Type",   "text/plain; charset=utf-8")
-        response:header     ("Content-Length",  #message)
+        response:header     ("Content-Length",  tostring(#message))
         response:header     ("Connection",     "close")
         response:end_header ()
         response:body       (message)
@@ -150,20 +135,17 @@ server.route("POST", "/users", function (request, response)
 
     response:status     (201)
     response:header     ("Content-Type",   "text/plain; charset=utf-8")
-    response:header     ("Content-Length",  #message)
+    response:header     ("Content-Length",  tostring(#message))
     response:header     ("Connection",     "close")
     response:end_header ()
     response:body       (message)
-
 end)
 
 -- ---------------------------------------------------------------------------
 -- DELETE /users/<id>
--- Tests: db.execute with an integer bind arg
 -- ---------------------------------------------------------------------------
 
 server.route("DELETE", "/users/", function (request, response)
-
     local path = request:get_path ()
     local id   = tonumber (path:match ("/users/(%d+)"))
 
@@ -171,7 +153,7 @@ server.route("DELETE", "/users/", function (request, response)
         local message = "Bad request: expected /users/<integer id>"
         response:status     (400)
         response:header     ("Content-Type",   "text/plain; charset=utf-8")
-        response:header     ("Content-Length",  #message)
+        response:header     ("Content-Length",  tostring(#message))
         response:header     ("Connection",     "close")
         response:end_header ()
         response:body       (message)
@@ -184,31 +166,50 @@ server.route("DELETE", "/users/", function (request, response)
 
     response:status     (200)
     response:header     ("Content-Type",   "text/plain; charset=utf-8")
-    response:header     ("Content-Length",  #message)
+    response:header     ("Content-Length",  tostring(#message))
     response:header     ("Connection",     "close")
     response:end_header ()
     response:body       (message)
-
 end)
 
--- =========================================================
--- PRUEBA DE TAREAS ASÍNCRONAS EN EL THREAD POOL DE C++
--- =========================================================
+-- ---------------------------------------------------------------------------
+-- GET /async (Tareas asíncronas en Lua usando corrutinas)
+-- ---------------------------------------------------------------------------
 
-function tarea_pesada_A()
-    print("[Thread Pool] Trabajador A ejecutando paso 1...")
-    coroutine.yield() -- Cede el control a C++
-    print("[Thread Pool] Trabajador A ejecutando paso 2...")
-    coroutine.yield()
-    print("[Thread Pool] Tarea A terminada con éxito!")
-end
+server.route("GET", "/async", function (request, response)
 
-function tarea_pesada_B()
-    print("[Thread Pool] Trabajador B ejecutando paso 1...")
-    coroutine.yield()
-    print("[Thread Pool] Tarea B terminada con éxito!")
-end
+    local log = "Iniciando planificador de tareas (Scheduler) en Lua...\n\n"
+    local tasks = {}
 
--- Lanzamos las tareas asíncronas desde Lua para que C++ las ejecute en paralelo
-server.async("tarea_pesada_A")
-server.async("tarea_pesada_B")
+    local function async_worker(name, steps)
+        for i = 1, steps do
+            log = log .. "[Trabajador " .. name .. "] Procesando paso " .. i .. " de " .. steps .. "\n"
+            coroutine.yield() -- Cede el control
+        end
+        log = log .. "[Trabajador " .. name .. "] ¡Ha terminado!\n"
+    end
+
+    table.insert(tasks, coroutine.create(function() async_worker("A (Corta)", 2) end))
+    table.insert(tasks, coroutine.create(function() async_worker("B (Larga)", 4) end))
+    table.insert(tasks, coroutine.create(function() async_worker("C (Media)", 3) end))
+
+    local tasks_pending = true
+    while tasks_pending do
+        tasks_pending = false
+        for _, task in ipairs(tasks) do
+            if coroutine.status(task) ~= "dead" then
+                tasks_pending = true
+                coroutine.resume(task)
+            end
+        end
+    end
+
+    log = log .. "\nTodas las tareas han finalizado con exito.\n"
+
+    response:status(200)
+    response:header("Content-Type", "text/plain; charset=utf-8")
+    response:header("Content-Length", tostring(#log))
+    response:header("Connection", "close")
+    response:end_header()
+    response:body(log)
+end)

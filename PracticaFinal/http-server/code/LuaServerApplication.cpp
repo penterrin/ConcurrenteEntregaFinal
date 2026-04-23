@@ -2,45 +2,78 @@
 /// angel.rodriguez@udit.es
 
 #include "LuaServerApplication.hpp"
+#include <chrono>
 
 namespace argb
 {
 
+    // Bucle del hilo exclusivo de Lua (procesa las tareas de una en una)
+    void LuaServerApplication::lua_worker_loop()
+    {
+        while (true)
+        {
+            std::function<void()> task;
+            {
+                std::unique_lock<std::mutex> lock(lua_queue_mutex);
+                lua_condition.wait(lock, [this] { return stop_lua_thread || !lua_tasks.empty(); });
+                if (stop_lua_thread && lua_tasks.empty()) return;
+                task = std::move(lua_tasks.front());
+                lua_tasks.pop();
+            }
+            task(); // Ejecuta la tarea de forma segura
+        }
+    }
+
     bool LuaServerApplication::RequestHandler::process(const HttpRequest& request, HttpResponse& response)
     {
-        try
+        if (!task_started)
         {
-            HttpResponse::Serializer        response_serializer(response);
-            LuaHttpResponseSerializerBridge response_bridge(response_serializer);
+            task_started = true;
 
-            auto request_table = server.virtual_machine.newTable();
-            auto response_table = server.virtual_machine.newTable();
+            // Encolamos la tarea en el hilo EXCLUSIVO de Lua (devuelve un future)
+            execution_future = server.enqueue_lua_task([this, &request, &response]() {
+                try
+                {
+                    HttpResponse::Serializer        response_serializer(response);
+                    LuaHttpResponseSerializerBridge response_bridge(response_serializer);
 
-            request_table.set("__native_object_pointer", static_cast<lua::Pointer>(const_cast<HttpRequest*>(&request)));
-            response_table.set("__native_object_pointer", static_cast<lua::Pointer>(&response_bridge));
+                    auto request_table = server.virtual_machine.newTable();
+                    auto response_table = server.virtual_machine.newTable();
 
-            server.virtual_machine["setmetatable"]
-            (
-                request_table,
-                server.virtual_machine["__http_request_metatable"]
-                );
+                    request_table.set("__native_object_pointer", static_cast<lua::Pointer>(const_cast<HttpRequest*>(&request)));
+                    response_table.set("__native_object_pointer", static_cast<lua::Pointer>(&response_bridge));
 
-            server.virtual_machine["setmetatable"]
-            (
-                response_table,
-                server.virtual_machine["__http_response_metatable"]
-                );
+                    server.virtual_machine["setmetatable"]
+                    (
+                        request_table,
+                        server.virtual_machine["__http_request_metatable"]
+                        );
 
-            // --- AÑADIMOS NUESTRO CANDADO PARA PROTEGER LA MÁQUINA VIRTUAL DE LUA ---
-            std::lock_guard<std::recursive_mutex> lock(server.lua_mutex);
-            endpoint.unref().call(request_table, response_table);
+                    server.virtual_machine["setmetatable"]
+                    (
+                        response_table,
+                        server.virtual_machine["__http_response_metatable"]
+                        );
+
+                    endpoint.unref().call(request_table, response_table);
+                }
+                catch (const lua::RuntimeError&)
+                {
+                    send_plain_text_response(response, 500, "Internal Server Error");
+                }
+                });
+
+            return false; // Retornamos false porque la tarea se está ejecutando asíncronamente
         }
-        catch (const lua::RuntimeError&)
+        else
         {
-            send_plain_text_response(response, 500, "Internal Server Error");
+            // Comprobamos si el hilo de Lua ha terminado de forma no bloqueante
+            if (execution_future.valid() && execution_future.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+            {
+                return true;
+            }
         }
-
-        return true;
+        return false;
     }
 
     LuaServerApplication::LuaServerApplication(const std::string_view& script_path_string)
@@ -48,24 +81,34 @@ namespace argb
         std::filesystem::path script_path(script_path_string);
 
         // Check if the script file exists and is a regular file:
-
         if (not std::filesystem::exists(script_path) || not std::filesystem::is_regular_file(script_path))
         {
             throw std::runtime_error("Script file does not exist or cannot be accessed or excecuted: " + script_path.string());
         }
 
         // Set the base path to the directory containing the script file:
-
         base_path = std::filesystem::absolute(script_path).parent_path();
 
         // Create the bridge between Lua and C++:
-
         create_lua_bridge();
 
         // Load the starting Lua script:
-        // --- AÑADIMOS NUESTRO CANDADO DURANTE LA INICIALIZACIÓN ---
-        std::lock_guard<std::recursive_mutex> lock(lua_mutex);
         virtual_machine.doFile(script_path.string());
+
+        // Arrancamos el hilo exclusivo de Lua
+        lua_thread = std::thread(&LuaServerApplication::lua_worker_loop, this);
+    }
+
+    LuaServerApplication::~LuaServerApplication()
+    {
+        {
+            std::unique_lock<std::mutex> lock(lua_queue_mutex);
+            stop_lua_thread = true;
+        }
+        lua_condition.notify_all();
+        if (lua_thread.joinable()) {
+            lua_thread.join();
+        }
     }
 
     HttpRequestHandler::Ptr LuaServerApplication::create_handler(HttpRequest::Method method, std::string_view path)
@@ -122,25 +165,6 @@ namespace argb
                 }
 
                 bridge_server_route(method_value.toString(), path_value.toString(), endpoint_value);
-            }
-        );
-
-        // --- AÑADIMOS LA RUTA 'async' PARA CUMPLIR EL ENUNCIADO AL 100% ---
-        server_bridge.set
-        (
-            "async",
-            [this](std::string function_name)
-            {
-                if (!thread_pool) return;
-
-                std::lock_guard<std::recursive_mutex> lock(this->lua_mutex);
-                auto coro = std::make_shared<lua::Coroutine>(virtual_machine, function_name.c_str());
-
-                if (coro->isError()) {
-                    virtual_machine.error("Error creating coroutine: %s", coro->getLastError().c_str());
-                    return;
-                }
-                enqueue_coroutine(coro);
             }
         );
 
@@ -223,10 +247,6 @@ namespace argb
 
         auto& endpoints_by_path = endpoints[static_cast<size_t>(method)];
 
-        // Keys ending with '/' act as prefix routes (e.g. "/users/" matches "/users/1").
-        // Keys without a trailing '/' match exactly or as a path-segment prefix.
-        // Both forms are kept as-is so they coexist as distinct entries in the map.
-
         endpoints_by_path.insert_or_assign(std::string(path), std::move(endpoint));
     }
 
@@ -289,10 +309,6 @@ namespace argb
 
         row_table.set("__native_object_pointer", static_cast<lua::Pointer>(bridge_ptr));
 
-        // Plant a sentinel lambda inside the row table. When Lua GCs the row table, this functor
-        // userdata becomes unreachable and its __gc metamethod fires, destroying the lambda and
-        // invoking the custom deleter, which removes the bridge from the map:
-
         auto gc_hook = std::shared_ptr<void>
             (
                 bridge_ptr,
@@ -325,25 +341,6 @@ namespace argb
         virtual_machine["setmetatable"](row_table, row_metatable);
 
         return row_table;
-    }
-
-    // --- AÑADIMOS LA LÓGICA FINAL QUE UNE C++ CON LUA ---
-    void LuaServerApplication::enqueue_coroutine(std::shared_ptr<lua::Coroutine> coro)
-    {
-        if (!thread_pool) return;
-
-        thread_pool->enqueue([this, coro]() {
-            {
-                std::lock_guard<std::recursive_mutex> lock(this->lua_mutex);
-                coro->resume();
-            }
-
-            // Si la corrutina hizo un yield, la volvemos a meter al Thread Pool para el futuro
-            if (coro->getStatus() == lua::Coroutine::Status::Suspended)
-            {
-                this->enqueue_coroutine(coro);
-            }
-            });
     }
 
 }

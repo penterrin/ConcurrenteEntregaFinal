@@ -1,8 +1,6 @@
-/// @copyright Copyright (c) 2026 Laura Gallego, All rights reserved.
-/// laura.gallego@udit.es
-
 #include <HttpServer.hpp>
 #include <iostream>
+#include <memory>
 #include <NetworkSetup.hpp>
 #include "SignalHandler.hpp"
 #include "StaticFileServer.hpp"
@@ -18,13 +16,11 @@ int main(int, const char* [])
         HttpServer   server;
         Port         port{ 80 };
 
+        // 1. Creamos las aplicaciones nativas y de Lua
         LuaServerApplication lua_server_app("../../examples/lua-server/main.lua");
         StaticFileServer     static_file_server("../../examples/static-website", "/");
 
-        lua_server_app.set_thread_pool(server.get_thread_pool());
-
-        server.register_handler_factory(lua_server_app);
-
+        // 2. Las registramos directamente (LuaServerApplication ya es Thread-Safe por dentro)
         server.register_handler_factory(lua_server_app);
         server.register_handler_factory(static_file_server);
 
@@ -37,7 +33,6 @@ int main(int, const char* [])
     catch (const NetworkException& exception)
     {
         std::cout << "Network exception: " << exception << std::endl;
-
         return 1;
     }
 
